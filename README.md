@@ -4,7 +4,7 @@
     <img src="https://img.shields.io/badge/CCDS-Project%20template-328F97?logo=cookiecutter" />
 </a>
 
-aws cloud and python to create an automated trading strategy.
+This project is a demonstration of using AWS cloud to run an automated trading strategy.
 
 ## Project Organization
 

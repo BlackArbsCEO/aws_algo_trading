@@ -1,0 +1,7 @@
+- request data from the api
+- format the data for storage
+- put the data into the table
+
+- query the table for the most recent update
+- calculate the difference in periods between now and the most recent update
+- 

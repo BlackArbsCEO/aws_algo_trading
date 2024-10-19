@@ -1,37 +1,177 @@
-from decimal import Decimal, ROUND_HALF_DOWN
+from typing import Any, Dict, List
 
+import boto3
 import numpy as np
 import pandas as pd
 import yfinance as yf
+from boto3.dynamodb.conditions import Key
+from botocore.exceptions import ClientError
+from loguru import logger
 
-symbols = ['BTC-USD', 'SPY', 'QQQ', 'IWM', 'TLT', 'GLD']
+from awbot.data_utils import convert_to_decimal, quantize_number
 
 
-def convert_to_decimal(
-    number: float, precision: int = 2, rounding: str = ROUND_HALF_DOWN
-):
+def put_price_items_with_condition(items: list[dict[str, str | float]]) -> None:
     """
-    Quantizes a number to a given precision and returns a float.
+    Puts a list of price items into the DynamoDB table, with a condition check
+    to prevent overwriting existing data.
 
-    Args:
-        number (float): The number to quantize.
-        precision (float, optional): The precision to quantize to. Defaults to 2.
-        rounding (str, optional): The rounding mode to use. Defaults to ROUND_HALF_DOWN.
+    Parameters
+    ----------
+    items : list[dict[str, str | float]]
+        A list of dictionaries, each representing a price data item. The
+        dictionaries must have the following keys:
+        - ticker: str
+        - timestamp: Decimal
+        - open: Decimal
+        - high: Decimal
+        - low: Decimal
+        - close: Decimal
+        - volume: Decimal
+        - dividend: Decimal
 
-    Returns:
-        Decimal: The quantized number.
+    Returns
+    -------
+    None
+
+    Notes
+    -----
+    The items are added to the DynamoDB table one by one, with a condition check
+    to prevent overwriting existing data. If the item already exists, a
+    ConditionalCheckFailedException is raised and logged as a warning. Any other
+    ClientError is logged as an exception.
     """
-    try:
-        number_decimal = Decimal(str(number))
-    except Exception as e:
-        raise Exception(f'unable to convert {number} to decimal: {e}')
+    for item in items:
+        try:
+            # Conditional put item
+            response = price_table.put_item(
+                Item=item,
+                # ConditionExpression ensures that the item is only added if it does not already exist
+                ConditionExpression="attribute_not_exists(#ts)",
+                ExpressionAttributeNames={"#ts": "timestamp"},
+            )
+            logger.info(
+                f"PutItem succeeded for ticker '{item['ticker']}' and timestamp '{item['timestamp']}':"
+            )
+            logger.info(response)
+        except ClientError as e:
+            if e.response["Error"]["Code"] == "ConditionalCheckFailedException":
+                logger.warning(
+                    f"Item with ticker-timestamp '{item['ticker']}'-'{item['timestamp']}' already exists. No overwrite occurred."
+                )
+            else:
+                logger.exception(f"Unexpected error: {e}")
+    return
 
-    # Set the precision to the desired number of decimal places
-    precision_decimal = Decimal("0." + "0" * precision)
 
-    # Quantize the number using ROUND_HALF_DOWN rounding mode
-    quantized_decimal = number_decimal.quantize(precision_decimal, rounding=rounding)
-    return quantized_decimal
+def put_price_data_in_table(
+    df: pd.DataFrame, bulk_insert: bool = False, overwrite: bool = False
+) -> None:
+    """
+    Inserts price data from a DataFrame into a DynamoDB table.
+
+    This function converts the DataFrame rows into a list of dictionaries, each
+    representing a price data item, and writes them to a DynamoDB table. If
+    `bulk_insert` or `overwrite` is set to True, the data is inserted in bulk
+    using a batch writer. Otherwise, individual items are inserted with a
+    conditional check to prevent overwriting existing data.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        A DataFrame containing price data with columns 'ticker', 'timestamp',
+        'open', 'high', 'low', and 'close'.
+    bulk_insert : bool, optional
+        If True, the items are inserted in bulk. Defaults to False.
+    overwrite : bool, optional
+        If True, existing items are overwritten during bulk insert. Defaults to False.
+
+    Returns
+    -------
+    None
+    """
+    items = [
+        {
+            "ticker": row["ticker"],
+            "timestamp": pd.to_datetime(timestamp).strftime("%Y-%m-%dT%H:%M:%S"),
+            "open": row["open"],
+            "high": row["high"],
+            "low": row["low"],
+            "close": row["close"],
+            "volume": row["volume"],
+            "dividends": row["dividends"],
+        }
+        for timestamp, row in df.iterrows()
+    ]
+    if bulk_insert or overwrite:
+        # Use batch writer to insert items in bulk
+        with price_table.batch_writer() as batch:
+            for item in items:
+                batch.put_item(Item=item)
+        logger.info(f"Inserted {len(items)} items into DynamoDB")
+    else:
+        put_price_items_with_condition(items)
+    return
+
+
+def query_last_n_prices(ticker: str, n: int) -> List[Dict[str, Any]]:
+    """
+    Queries the DynamoDB price table for the last N periods of prices
+    for the given ticker. It will return a list of dictionaries, where
+    each dictionary is a record returned from DynamoDB.
+
+    Parameters
+    ----------
+    ticker : str
+        The ticker symbol to query.
+    n : int
+        The number of records to return.
+
+    Returns
+    -------
+    list
+        A list of dictionaries, where each dictionary is a record
+        returned from DynamoDB.
+    """
+    response = price_table.query(
+        KeyConditionExpression=Key("ticker").eq(ticker.lower()),
+        ScanIndexForward=False,  # This orders results in descending order
+        Limit=n,  # Limit the results to the last N records
+    )
+    return response["Items"]
+
+
+def get_last_n_prices(symbols: list, n: int, column: str = "close") -> pd.DataFrame:
+    """
+    Retrieves the last N periods of prices for the given list of symbols from the DynamoDB price table.
+
+    Parameters
+    ----------
+    symbols : list
+        The list of symbols to query prices for.
+    n : int
+        The number of periods to retrieve.
+    column : str, optional
+        The column to retrieve from the DynamoDB price table (default is 'close').
+
+    Returns
+    -------
+    pd.DataFrame
+        A DataFrame with the specified column for each symbol, indexed by timestamp.
+    """
+    records = pd.DataFrame()
+    for symbol in symbols:
+        symbol = symbol.lower()
+        record = query_last_n_prices(symbol, n)
+        record_series = (
+            pd.DataFrame.from_records(record)
+            .assign(timestamp=lambda df: pd.DatetimeIndex(df["timestamp"]))
+            .set_index("timestamp")[column]
+            .rename(symbol)
+            .map(quantize_number)
+        )
+        records = pd.concat([records, record_series], axis=1).sort_index()
+    return records
 
 
 def get_price_history(
@@ -66,7 +206,7 @@ def get_price_history(
         and "open". The values are Decimals, which are suitable for use with
         DynamoDB.
     """
-    drop_cols = ['capital gains', 'stock splits']
+    drop_cols = ["capital gains", "stock splits"]
     if period is not None:
         prices = (
             yf.Tickers(" ".join(symbols))
@@ -101,11 +241,94 @@ def get_price_history(
             .reset_index(level=1)
         )
     else:
-        raise ValueError(f'{period=} {start_date=} {end_date=} can not all be None or invalid')
+        raise ValueError(
+            f"{period=} {start_date=} {end_date=} can not all be None or invalid"
+        )
 
     # convert floats to Decimals for dynamodb
     for col in prices.select_dtypes(include=[np.number]).columns:
-        prices[col] = prices[col].apply(
-            lambda x: convert_to_decimal(x, 5)
-        )
+        prices[col] = prices[col].apply(lambda x: convert_to_decimal(x, 5))
     return prices
+
+
+def update_price_table(symbols: list):
+    """
+    Updates the DynamoDB table by getting the most recent close prices for the
+    given list of symbols, and then comparing the most recent date in the table
+    with today's date. If the dates are different, it will get the new prices
+    between the last date in the table and today, and then update the table with
+    the new prices.
+
+    Parameters
+    ----------
+    symbols : list
+        A list of stock symbols to update the table with.
+
+    Returns
+    -------
+    None
+    """
+    most_recent_closes = get_last_n_prices(symbols, 1, column="close")
+    today = pd.to_datetime("today").date()
+    last_date = most_recent_closes.index[-1].date()
+    if today != last_date:
+        if (today - last_date).days == 1:
+            new_prices = get_price_history(symbols, period="1d")
+        else:
+            new_prices = get_price_history(
+                symbols,
+                start_date=last_date + pd.Timedelta(days=1),
+                end_date=today,
+            )
+        put_price_data_in_table(new_prices)
+
+    return
+
+
+def warmup_asset_data(symbols: list):
+    """
+    Warm up the DynamoDB table by querying the last price for the first symbol in the list.
+    If the item does not exist, it will be added to the table. This is useful for avoiding
+    cold start issues in AWS Lambda.
+
+    Parameters
+    ----------
+    symbols : list
+        A list of stock symbols to query prices for.
+
+    Returns
+    -------
+    None
+    """
+    symbol = symbols[0]
+    item = None
+    try:
+        item = query_last_n_prices(symbol, n=1)
+    except Exception as ClientError:
+        logger.error(ClientError)
+    finally:
+        if item is not None:
+            logger.info(f"Last record for {symbol}:\n{item}")
+        else:
+            logger.info(
+                f"No records found for {symbol} bulk inserting all available data..."
+            )
+            # initialize prices
+            prices = get_price_history(symbols)
+            put_price_data_in_table(prices, bulk_insert=True, overwrite=True)
+            logger.info(f"price data bulk loaded for {symbols}...[DONE]")
+
+    return
+
+
+if __name__ == "__main__":
+    # Initialize a session using Amazon DynamoDB
+    session = boto3.Session(profile_name="aws_algo_trader")
+    dynamodb = session.resource("dynamodb", region_name="us-east-1")
+
+    symbols = ["BTC-USD", "SPY", "QQQ", "IWM", "TLT", "GLD"]
+
+    # Select your DynamoDB table
+    price_table = dynamodb.Table("aws_price_table")
+    warmup_asset_data(symbols)
+    update_price_table(symbols)

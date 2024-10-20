@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional, Union
 
 import boto3
 import numpy as np
@@ -186,8 +186,8 @@ class YahooFinanceAPI:
     @staticmethod
     def get_price_history(
         symbols: list,
-        start_date: pd.Timestamp | datetime.date = None,
-        end_date: pd.Timestamp | datetime.date = None,
+        start_date: Optional[Union[pd.Timestamp, datetime.date]] = None,
+        end_date: Optional[Union[pd.Timestamp, datetime.date]] = None,
         period: str = None,
     ) -> pd.DataFrame:
         """

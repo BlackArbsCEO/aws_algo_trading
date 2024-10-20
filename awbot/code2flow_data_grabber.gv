@@ -1,0 +1,59 @@
+digraph G {
+concentrate=true;
+splines="ortho";
+rankdir="LR";
+subgraph legend{
+    rank = min;
+    label = "legend";
+    Legend [shape=none, margin=0, label = <
+        <table cellspacing="0" cellpadding="0" border="1"><tr><td>Code2flow Legend</td></tr><tr><td>
+        <table cellspacing="0">
+        <tr><td>Regular function</td><td width="50px" bgcolor='#cccccc'></td></tr>
+        <tr><td>Trunk function (nothing calls this)</td><td bgcolor='#966F33'></td></tr>
+        <tr><td>Leaf function (this calls nothing else)</td><td bgcolor='#6db33f'></td></tr>
+        <tr><td>Function call</td><td><font color='black'>&#8594;</font></td></tr>
+        </table></td></tr></table>
+        >];
+}node_d3f7ccad [label="0: (global)()" name="data_grabber::(global)" shape="rect" style="rounded,filled" fillcolor="#966F33" ];
+node_278a28c8 [label="150: get_last_n_prices()" name="data_grabber::DBOps.get_last_n_prices" shape="rect" style="rounded,filled" fillcolor="#cccccc" ];
+node_bf11bcdd [label="73: put_price_data_in_table()" name="data_grabber::DBOps.put_price_data_in_table" shape="rect" style="rounded,filled" fillcolor="#cccccc" ];
+node_11986c68 [label="19: put_price_items_with_condition()" name="data_grabber::DBOps.put_price_items_with_condition" shape="rect" style="rounded,filled" fillcolor="#6db33f" ];
+node_6f5d6993 [label="123: query_last_n_prices()" name="data_grabber::DBOps.query_last_n_prices" shape="rect" style="rounded,filled" fillcolor="#6db33f" ];
+node_de5558bb [label="187: get_price_history()" name="data_grabber::YahooFinanceAPI.get_price_history" shape="rect" style="rounded,filled" fillcolor="#6db33f" ];
+node_374fa284 [label="334: init_dynamodb()" name="data_grabber::init_dynamodb" shape="rect" style="rounded,filled" fillcolor="#6db33f" ];
+node_a376fb1d [label="264: update_price_table()" name="data_grabber::update_price_table" shape="rect" style="rounded,filled" fillcolor="#cccccc" ];
+node_67e90fc3 [label="298: warmup_asset_data()" name="data_grabber::warmup_asset_data" shape="rect" style="rounded,filled" fillcolor="#cccccc" ];
+node_d3f7ccad -> node_374fa284 [color="#0072B2" penwidth="2"];
+node_d3f7ccad -> node_a376fb1d [color="#0072B2" penwidth="2"];
+node_d3f7ccad -> node_67e90fc3 [color="#0072B2" penwidth="2"];
+node_278a28c8 -> node_6f5d6993 [color="#000000" penwidth="2"];
+node_bf11bcdd -> node_11986c68 [color="#0072B2" penwidth="2"];
+node_a376fb1d -> node_278a28c8 [color="#0072B2" penwidth="2"];
+node_a376fb1d -> node_bf11bcdd [color="#0072B2" penwidth="2"];
+node_a376fb1d -> node_de5558bb [color="#0072B2" penwidth="2"];
+node_a376fb1d -> node_de5558bb [color="#0072B2" penwidth="2"];
+node_67e90fc3 -> node_bf11bcdd [color="#009E73" penwidth="2"];
+node_67e90fc3 -> node_6f5d6993 [color="#009E73" penwidth="2"];
+node_67e90fc3 -> node_de5558bb [color="#009E73" penwidth="2"];
+subgraph cluster_c75b553b {
+    node_a376fb1d node_67e90fc3 node_374fa284 node_d3f7ccad;
+    label="File: data_grabber";
+    name="data_grabber";
+    style="filled";
+    graph[style=dotted];
+    subgraph cluster_c61a5d42 {
+        node_11986c68 node_bf11bcdd node_6f5d6993 node_278a28c8;
+        label="Class: DBOps";
+        name="DBOps";
+        style="filled";
+        graph[style=dotted];
+    };
+    subgraph cluster_ee231c71 {
+        node_de5558bb;
+        label="Class: YahooFinanceAPI";
+        name="YahooFinanceAPI";
+        style="filled";
+        graph[style=dotted];
+    };
+};
+}

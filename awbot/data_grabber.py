@@ -177,7 +177,7 @@ class DBOps:
                 .map(quantize_number)
             )
             records = pd.concat([records, record_series], axis=1).sort_index()
-            records.index.name = 'timestamp'
+            records.index.name = "timestamp"
         return records
 
 
@@ -332,15 +332,24 @@ def warmup_asset_data(symbols: list):
 
 
 def init_dynamodb():
+    """
+    Initializes the DynamoDB table by logging into the "aws_algo_trader" profile and
+    setting the region to "us-east-1". The function returns a DynamoDB Table object
+    for the "aws_price_table" table.
+
+    Returns
+    -------
+    boto3.resources.factory.dynamodb.Table
+    """
     session = boto3.Session(profile_name="aws_algo_trader")
     dynamodb = session.resource("dynamodb", region_name="us-east-1")
     return dynamodb.Table("aws_price_table")
+
 
 price_table = init_dynamodb()
 
 
 if __name__ == "__main__":
-
     tickers = ["BTC-USD", "SPY", "QQQ", "IWM", "TLT", "GLD"]
     warmup_asset_data(tickers)
     update_price_table(tickers)

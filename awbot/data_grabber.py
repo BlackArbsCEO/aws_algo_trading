@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Any, Dict, List
 
 import boto3
@@ -185,8 +186,8 @@ class YahooFinanceAPI:
     @staticmethod
     def get_price_history(
         symbols: list,
-        start_date: pd.Timestamp = None,
-        end_date: pd.Timestamp = None,
+        start_date: pd.Timestamp | datetime.date = None,
+        end_date: pd.Timestamp | datetime.date = None,
         period: str = None,
     ) -> pd.DataFrame:
         """
@@ -339,13 +340,7 @@ price_table = init_dynamodb()
 
 
 if __name__ == "__main__":
-    # Initialize a session using Amazon DynamoDB
-    session = boto3.Session(profile_name="aws_algo_trader")
-    dynamodb = session.resource("dynamodb", region_name="us-east-1")
 
-    symbols = ["BTC-USD", "SPY", "QQQ", "IWM", "TLT", "GLD"]
-
-    # Select your DynamoDB table
-    price_table = dynamodb.Table("aws_price_table")
-    warmup_asset_data(symbols)
-    update_price_table(symbols)
+    tickers = ["BTC-USD", "SPY", "QQQ", "IWM", "TLT", "GLD"]
+    warmup_asset_data(tickers)
+    update_price_table(tickers)

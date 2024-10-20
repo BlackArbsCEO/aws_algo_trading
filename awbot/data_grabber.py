@@ -65,6 +65,7 @@ class DBOps:
                     )
                 else:
                     logger.exception(f"Unexpected error: {e}")
+                    raise
         return
 
     @staticmethod
@@ -175,6 +176,7 @@ class DBOps:
                 .map(quantize_number)
             )
             records = pd.concat([records, record_series], axis=1).sort_index()
+            records.index.name = 'timestamp'
         return records
 
 
@@ -326,6 +328,14 @@ def warmup_asset_data(symbols: list):
             logger.info(f"price data bulk loaded for {symbols}...[DONE]")
 
     return
+
+
+def init_dynamodb():
+    session = boto3.Session(profile_name="aws_algo_trader")
+    dynamodb = session.resource("dynamodb", region_name="us-east-1")
+    return dynamodb.Table("aws_price_table")
+
+price_table = init_dynamodb()
 
 
 if __name__ == "__main__":

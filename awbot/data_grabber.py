@@ -275,7 +275,7 @@ class DBOps:
         return
 
 
-def warmup_asset_data(symbols: list):
+def warmup_asset_data(symbols: List[str]):
     """
     Warm up the DynamoDB table by querying the last price for the first symbol in the list.
     If the item does not exist, it will be added to the table. This is useful for avoiding
@@ -312,7 +312,7 @@ def warmup_asset_data(symbols: list):
     return
 
 
-def update_price_table(symbols: list):
+def update_price_table(symbols: List[str]):
     """
     Updates the DynamoDB table by getting the most recent close prices for the
     given list of symbols, and then comparing the most recent date in the table

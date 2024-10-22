@@ -14,7 +14,147 @@ from awbot.data_utils import convert_to_decimal, quantize_number
 
 
 @dataclass
+class YahooFinanceAPI:
+    @staticmethod
+    def get_price_history(
+        symbols: list,
+        start_date: Optional[Union[pd.Timestamp, datetime.date]] = None,
+        end_date: Optional[Union[pd.Timestamp, datetime.date]] = None,
+        period: str = None,
+    ) -> pd.DataFrame:
+        """
+        Downloads the price history for a given list of symbols from Yahoo Finance.
+
+        Parameters
+        ----------
+        symbols : list
+            A list of symbols to download the price history for.
+        start_date : pd.Timestamp, optional
+            The start date for the price history. If not provided, the entire price
+            history will be downloaded.
+        end_date : pd.Timestamp, optional
+            The end date for the price history. If not provided, the price history
+            will be downloaded until the current date.
+        period : str, optional
+            The period for which to download the price history. If not provided, the
+            entire price history will be downloaded. Valid values are "1mo", "3mo",
+            "6mo", "1y", "2y", "5y", "10y", and "ytd".
+
+        Returns
+        -------
+        pd.DataFrame
+            A pandas DataFrame with the price history for the given symbols. The
+            index is a datetime index, and the columns are "close", "high", "low",
+            and "open". The values are Decimals, which are suitable for use with
+            DynamoDB.
+        """
+        drop_cols = ["capital gains", "stock splits"]
+        if period is not None:
+            prices = (
+                yf.Tickers(" ".join(symbols))
+                .history(period=period)
+                .drop(drop_cols, axis=1)
+                .rename(columns=str.lower)
+                .dropna()
+                .stack(level=1, future_stack=True)
+                .rename_axis(["datetime", "ticker"])
+                .reset_index(level=1)
+            )
+        elif start_date is None and period is None:
+            prices = (
+                yf.Tickers(" ".join(symbols))
+                .history(period="max")
+                .rename(columns=str.lower)
+                .drop(drop_cols, axis=1)
+                .dropna()
+                .stack(level=1, future_stack=True)
+                .rename_axis(["datetime", "ticker"])
+                .reset_index(level=1)
+            )
+        elif start_date is not None and end_date is not None:
+            prices = (
+                yf.Tickers(" ".join(symbols))
+                .history(start=start_date, end=end_date)
+                .rename(columns=str.lower)
+                .drop(drop_cols, axis=1)
+                .dropna()
+                .stack(level=1, future_stack=True)
+                .rename_axis(["datetime", "ticker"])
+                .reset_index(level=1)
+            )
+        else:
+            raise ValueError(f"{period=} {start_date=} {end_date=} can not all be None or invalid")
+
+        # convert floats to Decimals for dynamodb
+        for col in prices.select_dtypes(include=[np.number]).columns:
+            prices[col] = prices[col].apply(lambda x: convert_to_decimal(x, 5))
+        return prices
+
+
+@dataclass
 class DBOps:
+
+    @staticmethod
+    def get_last_n_prices(symbols: list, n: int, column: str = "close") -> pd.DataFrame:
+        """
+        Retrieves the last N periods of prices for the given list of symbols from the DynamoDB price table.
+
+        Parameters
+        ----------
+        symbols : list
+            The list of symbols to query prices for.
+        n : int
+            The number of periods to retrieve.
+        column : str, optional
+            The column to retrieve from the DynamoDB price table (default is 'close').
+
+        Returns
+        -------
+        pd.DataFrame
+            A DataFrame with the specified column for each symbol, indexed by timestamp.
+        """
+        records = pd.DataFrame()
+        for symbol in symbols:
+            symbol = symbol.lower()
+            record = DBOps.query_last_n_prices(symbol, n)
+            record_series = (
+                pd.DataFrame.from_records(record)
+                .assign(timestamp=lambda df: pd.DatetimeIndex(df["timestamp"]))
+                .set_index("timestamp")[column]
+                .rename(symbol)
+                .map(quantize_number)
+            )
+            records = pd.concat([records, record_series], axis=1).sort_index()
+            records.index.name = "timestamp"
+        return records
+
+    @staticmethod
+    def query_last_n_prices(ticker: str, n: int) -> List[Dict[str, Any]]:
+        """
+        Queries the DynamoDB price table for the last N periods of prices
+        for the given ticker. It will return a list of dictionaries, where
+        each dictionary is a record returned from DynamoDB.
+
+        Parameters
+        ----------
+        ticker : str
+            The ticker symbol to query.
+        n : int
+            The number of records to return.
+
+        Returns
+        -------
+        list
+            A list of dictionaries, where each dictionary is a record
+            returned from DynamoDB.
+        """
+        response = price_table.query(
+            KeyConditionExpression=Key("ticker").eq(ticker.lower()),
+            ScanIndexForward=False,  # This orders results in descending order
+            Limit=n,  # Limit the results to the last N records
+        )
+        return response["Items"]
+
     @staticmethod
     def put_price_items_with_condition(items: list[dict[str, str | float]]) -> None:
         """
@@ -119,146 +259,39 @@ class DBOps:
             DBOps.put_price_items_with_condition(items)
         return
 
-    @staticmethod
-    def query_last_n_prices(ticker: str, n: int) -> List[Dict[str, Any]]:
-        """
-        Queries the DynamoDB price table for the last N periods of prices
-        for the given ticker. It will return a list of dictionaries, where
-        each dictionary is a record returned from DynamoDB.
 
-        Parameters
-        ----------
-        ticker : str
-            The ticker symbol to query.
-        n : int
-            The number of records to return.
+def warmup_asset_data(symbols: list):
+    """
+    Warm up the DynamoDB table by querying the last price for the first symbol in the list.
+    If the item does not exist, it will be added to the table. This is useful for avoiding
+    cold start issues in AWS Lambda.
 
-        Returns
-        -------
-        list
-            A list of dictionaries, where each dictionary is a record
-            returned from DynamoDB.
-        """
-        response = price_table.query(
-            KeyConditionExpression=Key("ticker").eq(ticker.lower()),
-            ScanIndexForward=False,  # This orders results in descending order
-            Limit=n,  # Limit the results to the last N records
-        )
-        return response["Items"]
+    Parameters
+    ----------
+    symbols : list
+        A list of stock symbols to query prices for.
 
-    @staticmethod
-    def get_last_n_prices(symbols: list, n: int, column: str = "close") -> pd.DataFrame:
-        """
-        Retrieves the last N periods of prices for the given list of symbols from the DynamoDB price table.
-
-        Parameters
-        ----------
-        symbols : list
-            The list of symbols to query prices for.
-        n : int
-            The number of periods to retrieve.
-        column : str, optional
-            The column to retrieve from the DynamoDB price table (default is 'close').
-
-        Returns
-        -------
-        pd.DataFrame
-            A DataFrame with the specified column for each symbol, indexed by timestamp.
-        """
-        records = pd.DataFrame()
-        for symbol in symbols:
-            symbol = symbol.lower()
-            record = DBOps.query_last_n_prices(symbol, n)
-            record_series = (
-                pd.DataFrame.from_records(record)
-                .assign(timestamp=lambda df: pd.DatetimeIndex(df["timestamp"]))
-                .set_index("timestamp")[column]
-                .rename(symbol)
-                .map(quantize_number)
-            )
-            records = pd.concat([records, record_series], axis=1).sort_index()
-            records.index.name = "timestamp"
-        return records
-
-
-@dataclass
-class YahooFinanceAPI:
-    @staticmethod
-    def get_price_history(
-        symbols: list,
-        start_date: Optional[Union[pd.Timestamp, datetime.date]] = None,
-        end_date: Optional[Union[pd.Timestamp, datetime.date]] = None,
-        period: str = None,
-    ) -> pd.DataFrame:
-        """
-        Downloads the price history for a given list of symbols from Yahoo Finance.
-
-        Parameters
-        ----------
-        symbols : list
-            A list of symbols to download the price history for.
-        start_date : pd.Timestamp, optional
-            The start date for the price history. If not provided, the entire price
-            history will be downloaded.
-        end_date : pd.Timestamp, optional
-            The end date for the price history. If not provided, the price history
-            will be downloaded until the current date.
-        period : str, optional
-            The period for which to download the price history. If not provided, the
-            entire price history will be downloaded. Valid values are "1mo", "3mo",
-            "6mo", "1y", "2y", "5y", "10y", and "ytd".
-
-        Returns
-        -------
-        pd.DataFrame
-            A pandas DataFrame with the price history for the given symbols. The
-            index is a datetime index, and the columns are "close", "high", "low",
-            and "open". The values are Decimals, which are suitable for use with
-            DynamoDB.
-        """
-        drop_cols = ["capital gains", "stock splits"]
-        if period is not None:
-            prices = (
-                yf.Tickers(" ".join(symbols))
-                .history(period=period)
-                .drop(drop_cols, axis=1)
-                .rename(columns=str.lower)
-                .dropna()
-                .stack(level=1, future_stack=True)
-                .rename_axis(["datetime", "ticker"])
-                .reset_index(level=1)
-            )
-        elif start_date is None and period is None:
-            prices = (
-                yf.Tickers(" ".join(symbols))
-                .history(period="max")
-                .rename(columns=str.lower)
-                .drop(drop_cols, axis=1)
-                .dropna()
-                .stack(level=1, future_stack=True)
-                .rename_axis(["datetime", "ticker"])
-                .reset_index(level=1)
-            )
-        elif start_date is not None and end_date is not None:
-            prices = (
-                yf.Tickers(" ".join(symbols))
-                .history(start=start_date, end=end_date)
-                .rename(columns=str.lower)
-                .drop(drop_cols, axis=1)
-                .dropna()
-                .stack(level=1, future_stack=True)
-                .rename_axis(["datetime", "ticker"])
-                .reset_index(level=1)
-            )
+    Returns
+    -------
+    None
+    """
+    symbol = symbols[0]
+    item = None
+    try:
+        item = DBOps.query_last_n_prices(symbol, n=1)
+    except Exception as ClientError:
+        logger.error(ClientError)
+    finally:
+        if item is not None:
+            logger.info(f"Last record for {symbol}:\n{item}")
         else:
-            raise ValueError(
-                f"{period=} {start_date=} {end_date=} can not all be None or invalid"
-            )
+            logger.info(f"No records found for {symbol} bulk inserting all available data...")
+            # initialize prices
+            prices = YahooFinanceAPI.get_price_history(symbols)
+            DBOps.put_price_data_in_table(prices, bulk_insert=True, overwrite=True)
+            logger.info(f"price data bulk loaded for {symbols}...[DONE]")
 
-        # convert floats to Decimals for dynamodb
-        for col in prices.select_dtypes(include=[np.number]).columns:
-            prices[col] = prices[col].apply(lambda x: convert_to_decimal(x, 5))
-        return prices
+    return
 
 
 def update_price_table(symbols: list):
@@ -295,42 +328,6 @@ def update_price_table(symbols: list):
     return
 
 
-def warmup_asset_data(symbols: list):
-    """
-    Warm up the DynamoDB table by querying the last price for the first symbol in the list.
-    If the item does not exist, it will be added to the table. This is useful for avoiding
-    cold start issues in AWS Lambda.
-
-    Parameters
-    ----------
-    symbols : list
-        A list of stock symbols to query prices for.
-
-    Returns
-    -------
-    None
-    """
-    symbol = symbols[0]
-    item = None
-    try:
-        item = DBOps.query_last_n_prices(symbol, n=1)
-    except Exception as ClientError:
-        logger.error(ClientError)
-    finally:
-        if item is not None:
-            logger.info(f"Last record for {symbol}:\n{item}")
-        else:
-            logger.info(
-                f"No records found for {symbol} bulk inserting all available data..."
-            )
-            # initialize prices
-            prices = YahooFinanceAPI.get_price_history(symbols)
-            DBOps.put_price_data_in_table(prices, bulk_insert=True, overwrite=True)
-            logger.info(f"price data bulk loaded for {symbols}...[DONE]")
-
-    return
-
-
 def init_dynamodb():
     """
     Initializes the DynamoDB table by logging into the "aws_algo_trader" profile and
@@ -341,7 +338,7 @@ def init_dynamodb():
     -------
     boto3.resources.factory.dynamodb.Table
     """
-    session = boto3.Session(profile_name="aws_algo_trader")
+    session = boto3.Session(profile_name="aws_algo_trader")  # or profile_name="default"
     dynamodb = session.resource("dynamodb", region_name="us-east-1")
     return dynamodb.Table("aws_price_table")
 

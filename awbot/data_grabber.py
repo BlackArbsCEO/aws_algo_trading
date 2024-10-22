@@ -297,9 +297,12 @@ def warmup_asset_data(symbols: list):
     except Exception as ClientError:
         logger.error(ClientError)
     finally:
-        if item is not None:
+        # item must always return a list or None
+        if not isinstance(item, list) and item is not None:
+            raise logger.exception(f"Unexpected item type: {type(item)}")
+        elif item is not None and len(item) > 0:
             logger.info(f"Last record for {symbol}:\n{item}")
-        else:
+        else:  # item is None or empty
             logger.info(f"No records found for {symbol} bulk inserting all available data...")
             # initialize prices
             prices = YahooFinanceAPI.get_price_history(symbols)

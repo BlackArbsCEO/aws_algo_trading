@@ -147,13 +147,28 @@ class DBOps:
         list
             A list of dictionaries, where each dictionary is a record
             returned from DynamoDB.
+
+        Notes
+        -----
+        When querying 1 item that exists the result is dictionary
+        When querying 1 item that does not exist the result is list
+        When querying multiple items that exist the result is list
+        Ensure that a list is always returned
         """
         response = price_table.query(
             KeyConditionExpression=Key("ticker").eq(ticker.lower()),
             ScanIndexForward=False,  # This orders results in descending order
             Limit=n,  # Limit the results to the last N records
         )
-        return response["Items"]
+        items = response["Items"]
+
+        if n == 1:
+            if not isinstance(items, list):
+                return [items]  # single object is now a list
+        if not isinstance(items, list):
+            raise TypeError("DynamoDB query result is not a list")
+
+        return items
 
     @staticmethod
     def put_price_items_with_condition(items: list[dict[str, str | float]]) -> None:
@@ -328,7 +343,9 @@ def update_price_table(symbols: list):
     return
 
 
-def init_dynamodb():
+def init_dynamodb(
+    table_name: str = "price_history_table",
+):
     """
     Initializes the DynamoDB table by logging into the "aws_algo_trader" profile and
     setting the region to "us-east-1". The function returns a DynamoDB Table object
@@ -340,7 +357,7 @@ def init_dynamodb():
     """
     session = boto3.Session(profile_name="aws_algo_trader")  # or profile_name="default"
     dynamodb = session.resource("dynamodb", region_name="us-east-1")
-    return dynamodb.Table("aws_price_table")
+    return dynamodb.Table(table_name)
 
 
 price_table = init_dynamodb()

@@ -314,7 +314,6 @@ dependencies:
   - zstandard=0.23.0=py312hef9b889_1
   - zstd=1.5.6=ha6fb4c9_0
   - pip:
-      - awbot==0.0.1
       - code2flow==2.5.1
       - coverage==7.6.3
       - ghp-import==2.1.0
@@ -326,4 +325,4 @@ dependencies:
       - python-dotenv==1.0.1
       - pyyaml-env-tag==0.1
       - watchdog==5.0.3
-
+      - -e .

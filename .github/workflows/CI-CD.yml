@@ -59,24 +59,42 @@ jobs:
 
       - name: Create Config File
         run: |
-          [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String("${{ secrets.CONFIG_FILE }}")) | Out-File -FilePath credentials -Encoding utf8
+          [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String("${{ secrets.CONFIG_FILE }}")) | Out-File -FilePath credentials -Encoding utf8 -NoNewline
 
       - name: Set AWS Credentials Environment Variable
         run: |
           echo "AWS_SHARED_CREDENTIALS_FILE=${env:GITHUB_WORKSPACE}\credentials" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          echo "AWS_PROFILE=aws_algo_trader" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          echo "AWS_DEFAULT_PROFILE=aws_algo_trader" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
 
       - name: Debug AWS Configuration
         run: |
+          echo "Current Directory: $PWD"
           echo "AWS_SHARED_CREDENTIALS_FILE: $env:AWS_SHARED_CREDENTIALS_FILE"
+          echo "AWS_PROFILE: $env:AWS_PROFILE"
+          echo "File Content:"
           Get-Content credentials
+          echo "File Permissions:"
+          Get-Acl credentials | Format-List
+          echo "AWS Configure List:"
           aws configure list
-          aws sts get-caller-identity
+          echo "Testing AWS Access:"
+          aws sts get-caller-identity --profile aws_algo_trader
+
+      - name: Modify data_grabber.py
+        run: |
+          $content = Get-Content -Path awbot/data_grabber.py -Raw
+          $content = $content -replace 'session = boto3\.Session\(profile_name="aws_algo_trader"\)', 'session = boto3.Session(profile_name="aws_algo_trader", region_name="us-east-1")'
+          $content | Set-Content -Path awbot/data_grabber.py -Encoding UTF8
 
       - name: Run Tests
         shell: bash -l {0}
+        env:
+          AWS_PROFILE: aws_algo_trader
+          AWS_DEFAULT_PROFILE: aws_algo_trader
         run: |
           conda activate aws_algo_trading
-          pytest
+          pytest -v
 
       - name: Clean up
         run: Remove-Item credentials -Force -ErrorAction SilentlyContinue

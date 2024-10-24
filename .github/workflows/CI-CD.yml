@@ -1,0 +1,55 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  build-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Install Miniconda
+        uses: goanpeca/conda-action@v2.0.0
+        with:
+          auto-update: true
+          channel-priority: strict
+
+      - name: Create Conda environment
+        run: |
+          conda env create -f environment_linux.yml
+          conda activate aws_algo_trading
+
+      - name: Run tests
+        run: |
+          conda activate aws_algo_trading
+          pytest
+
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Install Miniconda
+        uses: goanpeca/conda-action@v2.0.0
+        with:
+          auto-update: true
+          channel-priority: strict
+
+      - name: Create Conda environment
+        run: |
+          conda env create -f environment_windows.yml
+          call conda activate aws_algo_trading
+
+      - name: Run tests
+        run: |
+          call conda activate aws_algo_trading
+          pytest
+

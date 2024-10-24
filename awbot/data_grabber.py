@@ -300,6 +300,7 @@ def warmup_asset_data(symbols: List[str]):
         # item must always return a list or None
         if not isinstance(item, list) and item is not None:
             raise logger.exception(f"Unexpected item type: {type(item)}")
+        # item must always return a list with at least 1 item to be considered populated
         elif item is not None and len(item) > 0:
             logger.info(f"Last record for {symbol}:\n{item}")
         else:  # item is None or empty

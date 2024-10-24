@@ -68,6 +68,12 @@ jobs:
           [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String("${{ secrets.CONFIG_FILE }}")) | Out-File -FilePath credentials
         shell: pwsh
 
+      - name: Verify AWS Profile in Credentials
+        run: cat credentials | findstr "aws_algo_trader"
+
+      - name: Check AWS CLI Version (Windows)
+        run: aws --version
+
       - name: Set AWS Credentials Environment Variable
         run: echo "AWS_SHARED_CREDENTIALS_FILE=${{ github.workspace }}\\credentials" >> $GITHUB_ENV
 

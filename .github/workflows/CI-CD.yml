@@ -46,12 +46,22 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: conda-incubator/setup-miniconda@v3
+      - name: Install Miniconda
+        uses: conda-incubator/setup-miniconda@v3
         with:
-          activate-environment: aws_algo_trading
-          environment-file: environment_windows.yml
-          python-version: 3.12
           auto-activate-base: false
+          python-version: 3.12
+
+
+      - name: Check file permissions
+        run: |
+          ls -l environment_windows.yml
+
+      - name: Output environment file content
+        run: cat environment_windows.yml
+
+      - name: Create Conda environment
+        run: conda env create -f environment_windows.yml
 
       - name: Create Config File
         run: |

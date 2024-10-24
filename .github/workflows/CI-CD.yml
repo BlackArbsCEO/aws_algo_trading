@@ -27,26 +27,24 @@ jobs:
 
       - name: Create Config File
         run: |
-          echo "${{ secrets.CONFIG_FILE }}" | base64 --decode > credentials
+          echo "${{ secrets.CONFIG_FILE }}" | base64 --decode > credentials  
 
       - name: Set AWS Credentials Environment Variable
-        run: echo "AWS_SHARED_CREDENTIALS_FILE=${GITHUB_WORKSPACE}/credentials" >> $GITHUB_ENV
-
-      - name: Debug AWS Configuration
-        run: |
-          echo "AWS_SHARED_CREDENTIALS_FILE: $AWS_SHARED_CREDENTIALS_FILE"
-          cat credentials
-          aws configure list
-          aws sts get-caller-identity
+        run: echo "AWS_SHARED_CREDENTIALS_FILE=$(pwd)/credentials" >> $GITHUB_ENV  # Set the environment variable
 
       - name: Run Tests
         run: |
-          conda activate aws_algo_trading
-          pytest
+            conda activate aws_algo_trading
+            pytest
 
       - name: Clean up
         run: rm credentials
-        if: always()  # Run cleanup even if previous steps fail
+
+  build-windows:
+    name: Windows
+    runs-on: "windows-latest"
+    steps:
+      - uses: actions/checkout@v4
 
   build-windows:
     name: Windows
@@ -63,9 +61,6 @@ jobs:
           auto-activate-base: false
           python-version: 3.12
           activate-environment: aws_algo_trading
-
-      - name: Create Conda environment
-        run: conda env create -f environment_windows.yml
 
       - name: Create Config File
         run: |
@@ -90,4 +85,4 @@ jobs:
 
       - name: Clean up
         run: Remove-Item credentials -Force -ErrorAction SilentlyContinue
-        if: always()  # Run cleanup even if previous steps fail
+        if: always()

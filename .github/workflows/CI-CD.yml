@@ -59,7 +59,7 @@ jobs:
         shell: pwsh
 
       - name: Set AWS Credentials Environment Variable
-        run: echo "AWS_SHARED_CREDENTIALS_FILE=${{ github.workspace }}\credentials" >> $GITHUB_ENV
+        run: echo "AWS_SHARED_CREDENTIALS_FILE=${{ github.workspace }}\\credentials" >> $GITHUB_ENV
 
       - name: Run Tests
         run: |
@@ -67,4 +67,4 @@ jobs:
             pytest
 
       - name: Clean up
-        run: Remove-Item credentials  # Use PowerShell command to clean up
+        run: Remove-Item credentials -Force -ErrorAction SilentlyContinue

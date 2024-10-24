@@ -39,3 +39,31 @@ jobs:
 
       - name: Clean up
         run: rm credentials
+
+  build-windows:
+    name: Windows
+    runs-on: "windows-latest"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: conda-incubator/setup-miniconda@v3
+        with:
+          activate-environment: aws_algo_trading
+          environment-file: environment_windows.yml
+          python-version: 3.12
+          auto-activate-base: false
+
+      - name: Create Config File
+        run: |
+          echo "${{ secrets.CONFIG_FILE }}" | base64 --decode > credentials  
+
+      - name: Set AWS Credentials Environment Variable
+        run: echo "AWS_SHARED_CREDENTIALS_FILE=${{ github.workspace }}\credentials" >> $GITHUB_ENV
+
+      - name: Run Tests
+        run: |
+            conda activate aws_algo_trading
+            pytest
+
+      - name: Clean up
+        run: Remove-Item credentials  # Use PowerShell command to clean up

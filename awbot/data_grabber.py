@@ -13,6 +13,12 @@ from loguru import logger
 from awbot.data_utils import convert_to_decimal, quantize_number
 
 
+class DynamoDBQueryError(Exception):
+    """Custom exception for DynamoDB query errors"""
+
+    pass
+
+
 @dataclass
 class YahooFinanceAPI:
     @staticmethod
@@ -95,13 +101,13 @@ class YahooFinanceAPI:
 class DBOps:
 
     @staticmethod
-    def get_last_n_prices(symbols: list, n: int, column: str = "close") -> pd.DataFrame:
+    def get_last_n_prices(symbols: List[str], n: int, column: str = "close") -> pd.DataFrame:
         """
         Retrieves the last N periods of prices for the given list of symbols from the DynamoDB price table.
 
         Parameters
         ----------
-        symbols : list
+        symbols : List[str]
             The list of symbols to query prices for.
         n : int
             The number of periods to retrieve.
@@ -113,6 +119,11 @@ class DBOps:
         pd.DataFrame
             A DataFrame with the specified column for each symbol, indexed by timestamp.
         """
+
+        assert isinstance(symbols, list), "Symbols must be a list"
+        assert len(symbols) > 0, "Symbols list must not be empty"
+        assert n > 0, "n must be a positive integer"
+
         records = pd.DataFrame()
         for symbol in symbols:
             symbol = symbol.lower()
@@ -155,20 +166,33 @@ class DBOps:
         When querying multiple items that exist the result is list
         Ensure that a list is always returned
         """
-        response = price_table.query(
-            KeyConditionExpression=Key("ticker").eq(ticker.lower()),
-            ScanIndexForward=False,  # This orders results in descending order
-            Limit=n,  # Limit the results to the last N records
-        )
-        items = response["Items"]
 
-        if n == 1:
+        assert isinstance(ticker, str), "Ticker must be a string"
+        assert len(ticker) > 0, "Ticker must not be empty"
+        assert isinstance(n, int), "n must be an integer"
+        assert n > 0, "n must be a positive integer"
+
+        try:
+
+            response = price_table.query(
+                KeyConditionExpression=Key("ticker").eq(ticker.lower()),
+                ScanIndexForward=False,  # This orders results in descending order
+                Limit=n,  # Limit the results to the last N records
+            )
+            items = response["Items"]
+
+            if n == 1 and isinstance(items, dict):
+                return [items]
+
+            # Validate response format
             if not isinstance(items, list):
-                return [items]  # single object is now a list
-        if not isinstance(items, list):
-            raise TypeError("DynamoDB query result is not a list")
+                raise DynamoDBQueryError(
+                    f"Unexpected DynamoDB response format for ticker {ticker}"
+                )
+            return items
 
-        return items
+        except Exception as e:
+            raise DynamoDBQueryError(f"Failed to query DynamoDB for ticker {ticker}: {str(e)}")
 
     @staticmethod
     def put_price_items_with_condition(items: list[dict[str, str | float]]) -> None:
@@ -290,27 +314,26 @@ def warmup_asset_data(symbols: List[str]):
     -------
     None
     """
+    assert isinstance(symbols, list), "symbols must be a list"
+    assert len(symbols) > 0, "symbols list must not be empty"
+
     symbol = symbols[0]
-    item = None
     try:
         item = DBOps.query_last_n_prices(symbol, n=1)
-    except Exception as ClientError:
-        logger.error(ClientError)
-    finally:
-        # item must always return a list or None
-        if not isinstance(item, list) and item is not None:
-            raise logger.exception(f"Unexpected item type: {type(item)}")
-        # item must always return a list with at least 1 item to be considered populated
-        elif item is not None and len(item) > 0:
-            logger.info(f"Last record for {symbol}:\n{item}")
-        else:  # item is None or empty
-            logger.info(f"No records found for {symbol} bulk inserting all available data...")
-            # initialize prices
-            prices = YahooFinanceAPI.get_price_history(symbols)
-            DBOps.put_price_data_in_table(prices, bulk_insert=True, overwrite=True)
-            logger.info(f"price data bulk loaded for {symbols}...[DONE]")
+    except Exception as e:
+        logger.error(f"Error querying last price for {symbol}: {e}")
+        item = None
 
-    return
+    if item is not None and not isinstance(item, list):
+        raise ValueError(f"Unexpected item type: expected list, got {type(item)}")
+
+    if item and len(item) > 0:
+        logger.info(f"Last record for {symbol}:\n{item}")
+    else:
+        logger.info(f"No records found for {symbol} bulk inserting all available data...")
+        prices = YahooFinanceAPI.get_price_history(symbols)
+        DBOps.put_price_data_in_table(prices, bulk_insert=True, overwrite=True)
+        logger.info(f"Price data bulk loaded for {symbols}...[DONE]")
 
 
 def update_price_table(symbols: List[str]):

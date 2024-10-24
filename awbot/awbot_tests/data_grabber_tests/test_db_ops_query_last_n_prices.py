@@ -2,7 +2,10 @@ import pytest
 from boto3.dynamodb.conditions import Key
 
 # Import the actual DBOps class from your module
-from awbot.data_grabber import DBOps  # Adjust this import path to match your project structure
+from awbot.data_grabber import (
+    DBOps,
+    DynamoDBQueryError,
+)  # Adjust this import path to match your project structure
 
 
 class TestDBOps:
@@ -71,14 +74,18 @@ class TestDBOps:
             KeyConditionExpression=Key("ticker").eq("aapl"), ScanIndexForward=False, Limit=3
         )
 
-    def test_query_with_invalid_response_raises_type_error(self):
+    def test_query_with_invalid_response_raises_query_error(self):
         """Test that an invalid response type from DynamoDB raises TypeError"""
         # Setup
         self.mock_price_table.query.return_value = {"Items": "invalid_type"}
 
+        ticker = "AAPL"
+
         # Execute and Assert
-        with pytest.raises(TypeError, match="DynamoDB query result is not a list"):
-            DBOps.query_last_n_prices(ticker="AAPL", n=2)
+        with pytest.raises(
+            DynamoDBQueryError, match=f"Unexpected DynamoDB response format for ticker {ticker}"
+        ):
+            DBOps.query_last_n_prices(ticker=ticker, n=2)
 
     def test_ticker_exact_match(self):
         """Test that the ticker must match exactly in lowercase form"""

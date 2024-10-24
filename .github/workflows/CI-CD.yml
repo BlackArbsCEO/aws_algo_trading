@@ -27,22 +27,33 @@ jobs:
 
       - name: Create Config File
         run: |
-          echo "${{ secrets.CONFIG_FILE }}" | base64 --decode > credentials  
+          echo "${{ secrets.CONFIG_FILE }}" | base64 --decode > credentials
 
       - name: Set AWS Credentials Environment Variable
-        run: echo "AWS_SHARED_CREDENTIALS_FILE=$(pwd)/credentials" >> $GITHUB_ENV  # Set the environment variable
+        run: echo "AWS_SHARED_CREDENTIALS_FILE=${GITHUB_WORKSPACE}/credentials" >> $GITHUB_ENV
+
+      - name: Debug AWS Configuration
+        run: |
+          echo "AWS_SHARED_CREDENTIALS_FILE: $AWS_SHARED_CREDENTIALS_FILE"
+          cat credentials
+          aws configure list
+          aws sts get-caller-identity
 
       - name: Run Tests
         run: |
-            conda activate aws_algo_trading
-            pytest
+          conda activate aws_algo_trading
+          pytest
 
       - name: Clean up
         run: rm credentials
+        if: always()  # Run cleanup even if previous steps fail
 
   build-windows:
     name: Windows
     runs-on: "windows-latest"
+    defaults:
+      run:
+        shell: pwsh
     steps:
       - uses: actions/checkout@v4
 
@@ -51,36 +62,32 @@ jobs:
         with:
           auto-activate-base: false
           python-version: 3.12
-
-
-      - name: Check file permissions
-        run: |
-          ls -l environment_windows.yml
-
-      - name: Output environment file content
-        run: cat environment_windows.yml
+          activate-environment: aws_algo_trading
 
       - name: Create Conda environment
         run: conda env create -f environment_windows.yml
 
       - name: Create Config File
         run: |
-          [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String("${{ secrets.CONFIG_FILE }}")) | Out-File -FilePath credentials
-        shell: pwsh
-
-      - name: Verify AWS Profile in Credentials
-        run: cat credentials | findstr "aws_algo_trader"
-
-      - name: Check AWS CLI Version (Windows)
-        run: aws --version
+          [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String("${{ secrets.CONFIG_FILE }}")) | Out-File -FilePath credentials -Encoding utf8
 
       - name: Set AWS Credentials Environment Variable
-        run: echo "AWS_SHARED_CREDENTIALS_FILE=${{ github.workspace }}\\credentials" >> $GITHUB_ENV
+        run: |
+          echo "AWS_SHARED_CREDENTIALS_FILE=${env:GITHUB_WORKSPACE}\credentials" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+      - name: Debug AWS Configuration
+        run: |
+          echo "AWS_SHARED_CREDENTIALS_FILE: $env:AWS_SHARED_CREDENTIALS_FILE"
+          Get-Content credentials
+          aws configure list
+          aws sts get-caller-identity
 
       - name: Run Tests
+        shell: bash -l {0}
         run: |
-            conda activate aws_algo_trading
-            pytest
+          conda activate aws_algo_trading
+          pytest
 
       - name: Clean up
         run: Remove-Item credentials -Force -ErrorAction SilentlyContinue
+        if: always()  # Run cleanup even if previous steps fail

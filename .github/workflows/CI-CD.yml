@@ -40,11 +40,6 @@ jobs:
       - name: Clean up
         run: rm credentials
 
-  build-windows:
-    name: Windows
-    runs-on: "windows-latest"
-    steps:
-      - uses: actions/checkout@v4
 
   build-windows:
     name: Windows

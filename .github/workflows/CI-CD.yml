@@ -55,7 +55,8 @@ jobs:
 
       - name: Create Config File
         run: |
-          echo "${{ secrets.CONFIG_FILE }}" | base64 --decode > credentials  
+          echo "${{ secrets.CONFIG_FILE }}" | base64 --decode > credentials
+        shell: bash
 
       - name: Set AWS Credentials Environment Variable
         run: echo "AWS_SHARED_CREDENTIALS_FILE=${{ github.workspace }}\credentials" >> $GITHUB_ENV

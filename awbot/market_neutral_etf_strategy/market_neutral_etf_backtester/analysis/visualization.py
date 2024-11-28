@@ -88,7 +88,7 @@ class PerformanceVisualizer:
 
     def _add_equity_curves(self, fig: go.Figure, use_log_scale: bool):
         """Add equity curves to the figure."""
-        # Normalize curves to start at 100
+        # Normalize curves to start at X
         initial_value = 10000
         norm_gross = self._normalize_series(self.gross_returns, initial_value)
         norm_net = self._normalize_series(self.net_returns, initial_value)
@@ -247,13 +247,13 @@ class PerformanceVisualizer:
                     "Trading Costs<br>" "Date: %{x}<br>" "Cost: $%{y:,.2f}<br>" "<extra></extra>"
                 ),
             ),
-            row=2,
-            col=2,
+            row=4,
+            col=1,
         )
 
         # Update axes
-        fig.update_xaxes(title_text="Date", row=2, col=2)
-        fig.update_yaxes(title_text="Trading Costs ($)", row=2, col=2)
+        fig.update_xaxes(title_text="Date", row=4, col=1)
+        fig.update_yaxes(title_text="Trading Costs ($)", row=4, col=1)
 
     def _add_return_distribution(self, fig: go.Figure):
         """Add return distribution plots."""
@@ -326,35 +326,35 @@ class PerformanceVisualizer:
                         "<extra></extra>"
                     ),
                 ),
-                row=3,
+                row=4,
                 col=2,
             )
 
             # Add statistics annotation
-            stats_text = (
-                f"Cost Statistics:<br>"
-                f"Mean: {cost_pct.mean():.3f}%<br>"
-                f"Median: {cost_pct.median():.3f}%<br>"
-                f"Std Dev: {cost_pct.std():.3f}%<br>"
-                f"95th Pct: {cost_pct.quantile(0.95):.3f}%"
-            )
-
-            fig.add_annotation(
-                xref="x6",
-                yref="y6",
-                x=0.95,
-                y=0.95,
-                text=stats_text,
-                showarrow=False,
-                align="right",
-                bgcolor=self.style["paper_color"],
-                bordercolor=self.style["grid_color"],
-                borderwidth=1,
-            )
+            # stats_text = (
+            #     f"Cost Statistics:<br>"
+            #     f"Mean: {cost_pct.mean():.3f}%<br>"
+            #     f"Median: {cost_pct.median():.3f}%<br>"
+            #     f"Std Dev: {cost_pct.std():.3f}%<br>"
+            #     f"95th Pct: {cost_pct.quantile(0.95):.3f}%"
+            # )
+            #
+            # fig.add_annotation(
+            #     xref="x8",
+            #     yref="y8",
+            #     x=0.95, # expands the image beyond the values
+            #     y=0.95, # expands the image beyond the values
+            #     text=stats_text,
+            #     showarrow=False,
+            #     align="right",
+            #     bgcolor=self.style["paper_color"],
+            #     bordercolor=self.style["grid_color"],
+            #     borderwidth=1,
+            # )
 
         # Update axes
-        fig.update_xaxes(title_text="Cost (% of Portfolio)", row=3, col=2)
-        fig.update_yaxes(title_text="Probability", row=3, col=2)
+        fig.update_xaxes(title_text="Cost (% of Portfolio)", row=4, col=2)
+        fig.update_yaxes(title_text="Probability", row=4, col=2)
 
     def _add_monthly_returns(self, fig: go.Figure):
         """Add monthly return comparison."""
@@ -363,6 +363,7 @@ class PerformanceVisualizer:
         net_monthly = self.net_returns.resample("ME").apply(lambda x: (1 + x).prod() - 1) * 100
 
         # Add gross monthly returns
+
         fig.add_trace(
             go.Bar(
                 x=gross_monthly.index,
@@ -377,8 +378,8 @@ class PerformanceVisualizer:
                     "<extra></extra>"
                 ),
             ),
-            row=4,
-            col=1,
+            row=2,
+            col=2,
         )
 
         # Add net monthly returns
@@ -396,13 +397,13 @@ class PerformanceVisualizer:
                     "<extra></extra>"
                 ),
             ),
-            row=4,
-            col=1,
+            row=2,
+            col=2,
         )
 
         # Update axes
-        fig.update_xaxes(title_text="Date", row=4, col=1)
-        fig.update_yaxes(title_text="Monthly Return (%)", row=4, col=1)
+        fig.update_xaxes(title_text="Date", row=2, col=2)
+        fig.update_yaxes(title_text="Monthly Return (%)", row=2, col=2)
 
     def _add_rolling_metrics(self, fig: go.Figure, window: int = 63):
         """Add rolling performance metrics."""
@@ -424,7 +425,7 @@ class PerformanceVisualizer:
                     "<extra></extra>"
                 ),
             ),
-            row=4,
+            row=3,
             col=2,
         )
 
@@ -442,13 +443,13 @@ class PerformanceVisualizer:
                     "<extra></extra>"
                 ),
             ),
-            row=4,
+            row=3,
             col=2,
         )
 
         # Update axes
-        fig.update_xaxes(title_text="Date", row=4, col=2)
-        fig.update_yaxes(title_text=f"Rolling {window}d Sharpe Ratio", row=4, col=2)
+        fig.update_xaxes(title_text="Date", row=3, col=2)
+        fig.update_yaxes(title_text=f"Rolling {window}d Sharpe Ratio", row=3, col=2)
 
     def _add_cost_drag(self, fig: go.Figure):
         """Add cumulative cost drag analysis."""
@@ -554,11 +555,11 @@ class PerformanceVisualizer:
             "Gross vs Net Equity Curves",
             "Individual Pair Performance",
             "Strategy Drawdowns",
-            "Trading Costs Analysis",
-            "Return Distributions",
-            "Cost Impact Distribution",
             "Monthly Returns Comparison",
-            "Rolling Metrics",
+            "Return Distributions",
+            "Rolling Sharpe Ratio",
+            "Trading Costs Analysis",
+            "Cost Impact Distribution",
             "Cost Drag Analysis",
             "Pair Cost Analysis",
         )

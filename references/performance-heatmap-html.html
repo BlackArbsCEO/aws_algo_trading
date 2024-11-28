@@ -1,0 +1,66 @@
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Oxygen:wght@300;400;700&display=swap');
+
+table {
+    border-collapse: collapse;
+    width: 100%;
+    font-family: 'Oxygen', sans-serif;
+}
+
+th, td {
+    border: 1px solid #333;
+    padding: 12px;
+    text-align: center;
+}
+
+th:first-child, td:first-child {
+    width: auto;
+    white-space: nowrap;
+}
+
+th:not(:first-child), td:not(:first-child) {
+    width: 28%;
+}
+
+th {
+    background-color: #f5f5f5;
+}
+
+.strongly-positive { background-color: #15803d; color: white; }
+.positive { background-color: #22c55e; color: white; }
+.slightly-positive { background-color: #86efac; }
+.breakeven { background-color: #dcfce7; }
+.slightly-negative { background-color: #fca5a5; }
+.negative { background-color: #ef4444; color: white; }
+.very-negative { background-color: #b91c1c; color: white; }
+</style>
+
+<table>
+    <tr>
+        <th rowspan="2">Volatility</th>
+        <th colspan="3">Market Direction</th>
+    </tr>
+    <tr>
+        <th>Bullish</th>
+        <th>Bearish</th>
+        <th>Sideways</th>
+    </tr>
+    <tr>
+        <td><strong>High</strong></td>
+        <td class="positive">Positive</td>
+        <td class="strongly-positive">Strongly Positive</td>
+        <td class="very-negative">Very Negative</td>
+    </tr>
+    <tr>
+        <td><strong>Moderate</strong></td>
+        <td class="slightly-positive">Slightly Positive</td>
+        <td class="slightly-negative">Slightly Negative</td>
+        <td class="negative">Negative</td>
+    </tr>
+    <tr>
+        <td><strong>Low</strong></td>
+        <td class="breakeven">Breakeven/Slight Positive</td>
+        <td class="slightly-negative">Slightly Negative</td>
+        <td class="slightly-negative">Slight Negative</td>
+    </tr>
+</table>
